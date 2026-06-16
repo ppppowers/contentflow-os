@@ -53,7 +53,10 @@ export async function signUpAction(_prev: unknown, formData: FormData): Promise<
     .insert({ name: agencyName, slug })
     .select("id")
     .single();
-  if (agencyErr || !agency) return { error: "Could not create agency." };
+  if (agencyErr || !agency) {
+    console.error("[signup] agency insert failed:", agencyErr);
+    return { error: `Could not create agency: ${agencyErr?.message ?? "unknown error"}` };
+  }
 
   const { error: profileErr } = await admin.from("profiles").insert({
     id: userId,
