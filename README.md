@@ -1,0 +1,53 @@
+# ContentFlow OS
+
+AI-powered content agency operating system. Client intake → a 9-agent AI content pipeline → human-grade output → approval → delivery → revenue tracking.
+
+Multi-tenant from day one. Internal use now; white-label later.
+
+## Stack
+Next.js 14 (App Router) · TypeScript · Tailwind · Supabase (Postgres + Auth + Storage, RLS) · Claude API · Vercel.
+
+## Core principle
+**AUTHENTICITY > READABILITY > SEO > MARKETING.** No single agent writes final content — every piece flows through 9 agents with a humanization gate (Authenticity Score ≥ 90 required).
+
+## The pipeline
+`account_manager → research → strategist → newsletter → seo_blog → social → human_editor (≥90 gate) → compliance (gate) → delivery`
+
+## Quick start (local)
+```bash
+cp .env.local.example .env.local      # fill in keys (see below)
+npm install
+supabase start                         # local Postgres + Auth + Storage
+supabase db reset                      # runs migrations 0001–0012 + seed
+npm run dev                            # http://localhost:3000
+npm test                               # authenticity scorer unit tests
+```
+Open `/signup` → create an agency (you become owner) → add a client + brand profile → submit intake → "Create content project" → "Run pipeline" (needs `ANTHROPIC_API_KEY`).
+
+## Environment variables
+| Var | Where | Notes |
+|-----|-------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | public | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | Anon key (RLS enforces access) |
+| `SUPABASE_SERVICE_ROLE_KEY` | **server** | Bypasses RLS — onboarding + ownership-gated client decisions only |
+| `ANTHROPIC_API_KEY` | **server** | Claude API (the 9 agents) |
+| `NEXT_PUBLIC_SITE_URL` | public | e.g. `https://app.example.com` |
+
+Never prefix server secrets with `NEXT_PUBLIC_`.
+
+## Deployment
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full Supabase + Vercel guide and the production checklist.
+
+## Architecture docs
+Phase-by-phase design + decisions in [`docs/architecture/`](docs/architecture/):
+folder structure, database design, technical architecture, agent architecture, security plan, and one doc per build phase (1–14).
+
+## Project layout
+```
+app/            (auth) (agency) (client-portal) shells + /api routes
+components/      ui primitives + feature components
+lib/            supabase, auth, agents (pipeline), claude, validation, data, actions, export
+supabase/       migrations, seed.sql, config.toml, tests/
+docs/           architecture + deployment
+tests/          unit tests (vitest)
+```

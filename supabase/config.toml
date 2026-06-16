@@ -1,0 +1,25 @@
+# Supabase local config — ContentFlow OS
+project_id = "contentflow-os"
+
+[db]
+port = 54322
+major_version = 15
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/reset-password"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false   # dev: skip email confirm. Enable in production.
+
+# Custom access token hook — stamps agency_id + user_role into the JWT (migration 0011).
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
+[storage]
+enabled = true
