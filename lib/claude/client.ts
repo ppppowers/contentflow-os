@@ -44,6 +44,28 @@ export type Attachment = {
   dataBase64: string;
 };
 
+// Anthropic structured outputs reject numeric range/format keywords that
+// zod-to-json-schema emits (e.g. `minimum`/`maximum` on integers). Strip the
+// unsupported keywords recursively — Zod still enforces them after parse.
+const UNSUPPORTED_SCHEMA_KEYS = new Set([
+  "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+  "minLength", "maxLength", "pattern", "format", "minItems", "maxItems",
+  "uniqueItems", "default",
+]);
+
+export function sanitizeSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(sanitizeSchema);
+  if (node && typeof node === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      if (UNSUPPORTED_SCHEMA_KEYS.has(k)) continue;
+      out[k] = sanitizeSchema(v);
+    }
+    return out;
+  }
+  return node;
+}
+
 // Calls Claude with a forced JSON-schema response. Caller validates with Zod.
 export async function callStructured<T = unknown>(args: {
   tier: ModelTier;
@@ -72,8 +94,9 @@ export async function callStructured<T = unknown>(args: {
     max_tokens: args.maxTokens ?? 16000,
     system: args.system,
     messages: [{ role: "user", content }],
-    // Constrain output to the JSON schema (structured outputs).
-    output_config: { format: { type: "json_schema", schema: args.schema } },
+    // Constrain output to the JSON schema (structured outputs). Sanitized of
+    // keywords Anthropic's structured-output validator doesn't accept.
+    output_config: { format: { type: "json_schema", schema: sanitizeSchema(args.schema) } },
   } as never);
 
   const text =

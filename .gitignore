@@ -23,3 +23,5 @@ next-env.d.ts
 *.pem
 /coverage
 *.tsbuildinfo
+
+.vercel
