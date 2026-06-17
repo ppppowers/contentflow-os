@@ -50,20 +50,56 @@ export type Attachment = {
 const UNSUPPORTED_SCHEMA_KEYS = new Set([
   "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
   "minLength", "maxLength", "pattern", "format", "minItems", "maxItems",
-  "uniqueItems", "default",
+  "uniqueItems", "default", "$defs", "definitions",
 ]);
 
-export function sanitizeSchema(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(sanitizeSchema);
+// Resolve an internal JSON-pointer ref ("#/a/b/c") against the root schema.
+function resolveRef(root: Record<string, unknown>, ref: string): unknown {
+  if (!ref.startsWith("#/")) return null;
+  let cur: unknown = root;
+  for (const part of ref.slice(2).split("/")) {
+    const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
+    if (!cur || typeof cur !== "object") return null;
+    cur = (cur as Record<string, unknown>)[key];
+  }
+  return cur ?? null;
+}
+
+// Anthropic structured outputs require refs only under $defs/definitions; zod
+// often emits $refs pointing into /properties. Inline every $ref against the
+// root so the schema is fully self-contained (our schemas are non-recursive).
+function inlineRefs(node: unknown, root: Record<string, unknown>, depth = 0): unknown {
+  if (depth > 200) return {};
+  if (Array.isArray(node)) return node.map((n) => inlineRefs(n, root, depth + 1));
+  if (node && typeof node === "object") {
+    const o = node as Record<string, unknown>;
+    if (typeof o.$ref === "string") {
+      const target = resolveRef(root, o.$ref);
+      return target ? inlineRefs(target, root, depth + 1) : {};
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(o)) out[k] = inlineRefs(v, root, depth + 1);
+    return out;
+  }
+  return node;
+}
+
+function stripKeys(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripKeys);
   if (node && typeof node === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
       if (UNSUPPORTED_SCHEMA_KEYS.has(k)) continue;
-      out[k] = sanitizeSchema(v);
+      out[k] = stripKeys(v);
     }
     return out;
   }
   return node;
+}
+
+// Inline $refs (against the original root, $defs intact) then strip unsupported keys.
+export function sanitizeSchema(schema: Record<string, unknown>): unknown {
+  return stripKeys(inlineRefs(schema, schema));
 }
 
 // Calls Claude with a forced JSON-schema response. Caller validates with Zod.

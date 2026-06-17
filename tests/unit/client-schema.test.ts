@@ -1,9 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { sanitizeSchema } from "@/lib/claude/client";
 import { jsonSchemaFor } from "@/lib/validation/agent-io";
+import { briefJsonSchema } from "@/lib/validation/interview";
+import { meetingReportJsonSchema } from "@/lib/validation/voice";
+import { scorecardJudgeJsonSchema } from "@/lib/validation/scorecard";
 
-// Recursively assert no unsupported keyword survives anywhere in the schema.
-const BANNED = ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "pattern", "format", "minItems", "maxItems", "uniqueItems", "default"];
+const BANNED = [
+  "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+  "minLength", "maxLength", "pattern", "format", "minItems", "maxItems",
+  "uniqueItems", "default", "$ref", "$defs", "definitions",
+];
 function findBanned(node: unknown, hits: string[] = []): string[] {
   if (Array.isArray(node)) node.forEach((n) => findBanned(n, hits));
   else if (node && typeof node === "object") {
@@ -15,27 +21,40 @@ function findBanned(node: unknown, hits: string[] = []): string[] {
   return hits;
 }
 
-describe("sanitizeSchema", () => {
-  it("strips numeric range keywords from integer fields", () => {
-    const input = { type: "object", properties: { score: { type: "integer", minimum: 0, maximum: 100 } } };
-    const out = sanitizeSchema(input);
+describe("sanitizeSchema — strips unsupported keywords", () => {
+  it("removes numeric range keywords from integers", () => {
+    const out = sanitizeSchema({ type: "object", properties: { score: { type: "integer", minimum: 0, maximum: 100 } } });
     expect(findBanned(out)).toEqual([]);
-    // structure + type preserved
     expect((out as any).properties.score.type).toBe("integer");
   });
+});
 
-  it("recurses into nested objects, arrays, $defs", () => {
-    const input = {
+describe("sanitizeSchema — inlines $refs", () => {
+  it("inlines a $ref pointing into /properties and drops $defs", () => {
+    const schema = {
       type: "object",
-      properties: { items: { type: "array", items: { type: "object", properties: { n: { type: "integer", minimum: 1 } } } } },
-      $defs: { x: { type: "string", minLength: 2, pattern: "^a" } },
+      $defs: { Item: { type: "object", properties: { title: { type: "string" } } } },
+      properties: {
+        a: { $ref: "#/$defs/Item" },
+        b: { type: "array", items: { $ref: "#/properties/a" } },
+      },
     };
-    expect(findBanned(sanitizeSchema(input))).toEqual([]);
+    const out = sanitizeSchema(schema) as any;
+    expect(findBanned(out)).toEqual([]); // no $ref, no $defs
+    expect(out.properties.a.properties.title.type).toBe("string"); // inlined
+    expect(out.properties.b.items.properties.title.type).toBe("string"); // chained ref inlined
   });
+});
 
-  it("leaves a real agent schema free of banned keywords", () => {
-    // human_editor carries authenticityScore (0-100) → would emit min/max
-    const cleaned = sanitizeSchema(jsonSchemaFor("human_editor"));
-    expect(findBanned(cleaned)).toEqual([]);
-  });
+describe("real agent/feature schemas are clean after sanitize", () => {
+  for (const [name, schema] of [
+    ["human_editor", jsonSchemaFor("human_editor")],
+    ["interview brief", briefJsonSchema],
+    ["meeting report", meetingReportJsonSchema],
+    ["scorecard judge", scorecardJudgeJsonSchema],
+  ] as const) {
+    it(`${name} has no banned keywords`, () => {
+      expect(findBanned(sanitizeSchema(schema as Record<string, unknown>))).toEqual([]);
+    });
+  }
 });
