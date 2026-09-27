@@ -23,8 +23,9 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { ProjectRunner } from "@/components/content/ProjectRunner";
 import { PieceCard } from "@/components/content/PieceCard";
-import { listProjectImages } from "@/lib/data/images";
+import { listProjectImages, listImagePrompts } from "@/lib/data/images";
 import { IMAGE_CHANNELS } from "@/lib/images/service";
+import { imagesConfigured } from "@/lib/images/openai";
 import { RegenerateButton } from "@/components/content/RegenerateButton";
 
 const RUN_TONE: Record<string, BadgeTone> = {
@@ -48,13 +49,15 @@ export default async function ProjectPage({
   const bundle = await getProjectBundle(params.projectId);
   if (!bundle) notFound();
   const { project, runs, latest, pieces, authenticity } = bundle;
-  const [approvals, revisions, similar, qaRun, images] = await Promise.all([
+  const [approvals, revisions, similar, qaRun, images, imagePrompts] = await Promise.all([
     getApprovals(project.id),
     getRevisions(project.id),
     checkProjectSimilarity(project.id),
     getLatestQARun(project.id),
     listProjectImages(project.id),
+    listImagePrompts(project.id),
   ]);
+  const canGenerate = imagesConfigured();
   const finished = SEQUENCE.every((a) => a in latest);
   const orderedPieces = pieces
     .filter((p) => p.body?.trim())
@@ -132,7 +135,7 @@ export default async function ProjectPage({
         doneSteps={SEQUENCE.filter((a) => a in latest)}
         autoStart={searchParams.run === "1"}
         wantsImages={project.options?.images === true}
-        hasImages={images.length > 0}
+        hasImages={images.length > 0 || imagePrompts.size > 0}
         finished={finished}
       />
 
@@ -152,6 +155,8 @@ export default async function ProjectPage({
               }}
               images={images.filter((i) => i.channel === p.channel)}
               canHaveImages={p.channel in IMAGE_CHANNELS}
+              imagePrompt={imagePrompts.get(p.id) ?? null}
+              canGenerate={canGenerate}
             />
           ))}
         </section>

@@ -32,3 +32,18 @@ export async function listProjectImages(projectId: string): Promise<ContentImage
     created_at: r.created_at,
   }));
 }
+
+// Saved image prompt per piece id (empty if migration 0032 isn't applied yet).
+export async function listImagePrompts(projectId: string): Promise<Map<string, string>> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("content_pieces")
+    .select("id, image_prompt")
+    .eq("project_id", projectId);
+  if (error) return new Map();
+  return new Map(
+    ((data as { id: string; image_prompt: string | null }[]) ?? [])
+      .filter((r) => r.image_prompt)
+      .map((r) => [r.id, r.image_prompt as string]),
+  );
+}

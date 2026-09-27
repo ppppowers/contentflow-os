@@ -81,9 +81,9 @@ export function CreateForm({ clients, defaultClientId }: { clients: ClientOption
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" name="images" defaultChecked className="mt-0.5" />
           <span>
-            Create images for the social posts and newsletter
+            Images for the social posts and newsletter
             <span className="block text-xs text-neutral-400">
-              Made with OpenAI after the writing is done (a few cents per image). You can add or redo images later.
+              Made with OpenAI after the writing is done (a few cents per image). No OpenAI key or credits? You still get a ready-to-copy prompt for ChatGPT.
             </span>
           </span>
         </label>

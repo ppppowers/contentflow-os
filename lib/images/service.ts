@@ -3,18 +3,11 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { createClient } from "@/lib/supabase/server";
 import { callStructured } from "@/lib/claude/client";
-import { generateImage, type ImageSize } from "./openai";
+import { generateImage, imagesConfigured, OpenAIImageError } from "./openai";
+import { IMAGE_CHANNELS } from "./channels";
 
+export { IMAGE_CHANNELS };
 export const IMAGE_BUCKET = "content-images";
-
-// Which pieces get an image, and the shape that suits each channel.
-export const IMAGE_CHANNELS: Record<string, ImageSize> = {
-  instagram: "1024x1024",
-  facebook: "1536x1024",
-  linkedin: "1536x1024",
-  newsletter: "1536x1024",
-  blog: "1536x1024",
-};
 
 const promptSchema = z.object({
   prompts: z.array(z.object({ channel: z.string(), prompt: z.string() })),
@@ -77,14 +70,22 @@ async function writePrompts(projectId: string, pieces: Piece[]): Promise<Map<str
   return out;
 }
 
-export type ImageJobResult = { created: number; errors: string[] };
+// promptsOnly: no image was attempted (no key) or OpenAI refused for billing —
+// the prompts were still written and saved so they can be pasted into ChatGPT.
+export type ImageJobResult = {
+  created: number;
+  errors: string[];
+  promptsOnly?: "no_key" | "no_credits";
+  prompts: { channel: string; prompt: string }[];
+};
 
 // Generate images for a project. With `channel`, only that piece; with `prompt`,
-// use the caller's prompt verbatim instead of asking Claude for one.
+// use the caller's prompt verbatim instead of asking Claude for one. Prompts are
+// always saved on the piece, even when image generation isn't available.
 export async function generateProjectImages(
   projectId: string,
   ctx: { agencyId: string; userId: string },
-  opts: { channel?: string; prompt?: string } = {},
+  opts: { channel?: string; prompt?: string; promptsOnly?: boolean } = {},
 ): Promise<ImageJobResult> {
   const supabase = createClient();
   const { data: rows } = await supabase
@@ -95,13 +96,32 @@ export async function generateProjectImages(
   if (opts.channel) pieces = pieces.filter((p) => p.channel === opts.channel);
   // A full set skips the blog (the newsletter image usually covers it) to save cost.
   else pieces = pieces.filter((p) => p.channel !== "blog");
-  if (pieces.length === 0) return { created: 0, errors: ["No finished content to make images for yet."] };
+  if (pieces.length === 0) {
+    return { created: 0, errors: ["No finished content to make images for yet."], prompts: [] };
+  }
 
   const prompts =
     opts.prompt && pieces.length === 1 ? new Map([[pieces[0].channel, opts.prompt]]) : await writePrompts(projectId, pieces);
 
+  // Save each prompt on its piece (ignored if migration 0032 isn't applied yet).
+  await Promise.all(
+    pieces.map((p) =>
+      prompts.has(p.channel)
+        ? supabase.from("content_pieces").update({ image_prompt: prompts.get(p.channel) }).eq("id", p.id)
+        : null,
+    ),
+  );
+  const promptList = pieces
+    .filter((p) => prompts.has(p.channel))
+    .map((p) => ({ channel: p.channel, prompt: prompts.get(p.channel)! }));
+
+  if (opts.promptsOnly || !imagesConfigured()) {
+    return { created: 0, errors: [], promptsOnly: "no_key", prompts: promptList };
+  }
+
   const errors: string[] = [];
   let created = 0;
+  let billing = false;
   await Promise.all(
     pieces.map(async (piece) => {
       const prompt = prompts.get(piece.channel);
@@ -130,9 +150,12 @@ export async function generateProjectImages(
         if (insErr) throw new Error(`save failed: ${insErr.message}`);
         created++;
       } catch (e) {
-        errors.push(`${piece.channel}: ${e instanceof Error ? e.message : "failed"}`);
+        if (e instanceof OpenAIImageError && e.isBilling) billing = true;
+        else errors.push(`${piece.channel}: ${e instanceof Error ? e.message : "failed"}`);
       }
     }),
   );
-  return { created, errors };
+  if (billing && created === 0) return { created, errors, promptsOnly: "no_credits", prompts: promptList };
+  if (billing) errors.push("Some images were skipped: the OpenAI account is out of credits.");
+  return { created, errors, prompts: promptList };
 }

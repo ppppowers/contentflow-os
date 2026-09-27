@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PieceEditor } from "./PieceEditor";
 import { deleteImage } from "@/lib/actions/content";
+import { chatGptImagePrompt } from "@/lib/images/channels";
 
 const CHANNEL_LABELS: Record<string, string> = {
   newsletter: "Newsletter",
@@ -22,11 +23,15 @@ export function PieceCard({
   piece,
   images,
   canHaveImages,
+  imagePrompt,
+  canGenerate,
 }: {
   projectId: string;
   piece: { id: string; channel: string; body: string; metadata: Record<string, unknown> };
   images: Image[];
   canHaveImages: boolean;
+  imagePrompt: string | null;
+  canGenerate: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const meta = piece.metadata ?? {};
@@ -72,35 +77,62 @@ export function PieceCard({
         {piece.body}
       </p>
 
-      {canHaveImages && <ImageStrip projectId={projectId} channel={piece.channel} images={images} />}
+      {canHaveImages && (
+        <ImageStrip
+          projectId={projectId}
+          channel={piece.channel}
+          images={images}
+          imagePrompt={imagePrompt}
+          canGenerate={canGenerate}
+        />
+      )}
     </article>
   );
 }
 
-function ImageStrip({ projectId, channel, images }: { projectId: string; channel: string; images: Image[] }) {
+function ImageStrip({
+  projectId,
+  channel,
+  images,
+  imagePrompt,
+  canGenerate,
+}: {
+  projectId: string;
+  channel: string;
+  images: Image[];
+  imagePrompt: string | null;
+  canGenerate: boolean;
+}) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"image" | "prompt" | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [custom, setCustom] = useState(false);
-  const [prompt, setPrompt] = useState(images[0]?.prompt ?? "");
+  const [prompt, setPrompt] = useState(imagePrompt ?? images[0]?.prompt ?? "");
 
-  async function generate(withPrompt?: string) {
-    setBusy(true);
+  async function call(kind: "image" | "prompt", withPrompt?: string) {
+    setBusy(kind);
     setErr(null);
+    setNote(null);
     const res = await fetch("/api/images", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId, channel, prompt: withPrompt }),
+      body: JSON.stringify({ projectId, channel, prompt: withPrompt, promptsOnly: kind === "prompt" }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) setErr(data.error || (data.errors ?? []).join("; ") || "Image failed");
-    setBusy(false);
+    else if (data.promptsOnly === "no_credits") {
+      setNote("Your OpenAI account is out of credits — copy the prompt below into ChatGPT instead.");
+    }
+    setBusy(null);
     setCustom(false);
     router.refresh();
   }
 
+  const shownPrompt = imagePrompt ?? images[0]?.prompt ?? null;
+
   return (
-    <div className="space-y-2 border-t border-neutral-100 pt-3">
+    <div className="space-y-3 border-t border-neutral-100 pt-3">
       {images.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {images.map((img) => (
@@ -126,48 +158,81 @@ function ImageStrip({ projectId, channel, images }: { projectId: string; channel
         </div>
       )}
 
-      {custom ? (
-        <div className="space-y-2">
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={3}
-            placeholder="Describe the image you want, e.g. 'A cozy coffee shop counter at sunrise, warm light, editorial photo style'"
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
-          />
-          <div className="flex gap-2">
-            <button
-              disabled={busy || prompt.trim().length < 5}
-              onClick={() => generate(prompt)}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-            >
-              {busy ? "Creating…" : "Create image"}
-            </button>
-            <button onClick={() => setCustom(false)} className="text-xs text-neutral-500 hover:underline">
-              Cancel
-            </button>
+      {/* ChatGPT-ready prompt: always available, works without OpenAI credits. */}
+      {shownPrompt ? (
+        <div className="space-y-2 rounded-lg bg-neutral-50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-neutral-600">Image prompt for ChatGPT</p>
+            <div className="flex items-center gap-3">
+              <CopyButton text={chatGptImagePrompt(channel, shownPrompt)} label="Copy for ChatGPT" />
+              <a href="https://chatgpt.com/" target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">
+                Open ChatGPT ↗
+              </a>
+            </div>
           </div>
+          <p className="text-xs leading-relaxed text-neutral-600">{shownPrompt}</p>
         </div>
       ) : (
-        <div className="flex items-center gap-3 text-xs">
+        !canGenerate && (
           <button
-            disabled={busy}
-            onClick={() => generate()}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 font-medium hover:bg-neutral-50 disabled:opacity-50"
+            disabled={busy !== null}
+            onClick={() => call("prompt")}
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50 disabled:opacity-50"
           >
-            {busy ? "Creating image…" : images.length ? "New image" : "Create image"}
+            {busy === "prompt" ? "Writing prompt…" : "Write an image prompt for ChatGPT"}
           </button>
-          <button onClick={() => setCustom(true)} className="text-neutral-500 hover:underline">
-            Describe my own
-          </button>
-        </div>
+        )
       )}
+
+      {canGenerate &&
+        (custom ? (
+          <div className="space-y-2">
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={3}
+              placeholder="Describe the image you want, e.g. 'A cozy coffee shop counter at sunrise, warm light, editorial photo style'"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+            />
+            <div className="flex gap-2">
+              <button
+                disabled={busy !== null || prompt.trim().length < 5}
+                onClick={() => call("image", prompt)}
+                className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              >
+                {busy === "image" ? "Creating…" : "Create image"}
+              </button>
+              <button onClick={() => setCustom(false)} className="text-xs text-neutral-500 hover:underline">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 text-xs">
+            <button
+              disabled={busy !== null}
+              onClick={() => call("image")}
+              className="rounded-md border border-neutral-300 px-3 py-1.5 font-medium hover:bg-neutral-50 disabled:opacity-50"
+            >
+              {busy === "image" ? "Creating image…" : images.length ? "New image" : "Create image"}
+            </button>
+            <button onClick={() => setCustom(true)} className="text-neutral-500 hover:underline">
+              Describe my own
+            </button>
+          </div>
+        ))}
+      {!canGenerate && shownPrompt && (
+        <p className="text-xs text-neutral-400">
+          To create images right here instead, add an OpenAI API key in Vercel (OPENAI_API_KEY).
+        </p>
+      )}
+      {note && <p className="text-xs text-amber-700">{note}</p>}
       {err && <p className="text-xs text-red-600">{err}</p>}
     </div>
   );
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -179,7 +244,7 @@ function CopyButton({ text }: { text: string }) {
       }}
       className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white hover:bg-neutral-800"
     >
-      {copied ? "Copied ✓" : "Copy"}
+      {copied ? "Copied ✓" : label}
     </button>
   );
 }
