@@ -79,7 +79,7 @@ export function buildSystemPrompt(agent: AgentName, ctx: AssembledContext): stri
 // User message = the upstream material this agent operates on.
 export function buildUserMessage(agent: AgentName, ctx: AssembledContext): string {
   const parts: string[] = [];
-  parts.push(`MONTHLY INTAKE:\n${ctx.intakeText || "(none provided)"}`);
+  parts.push(`CLIENT BRIEF & INTAKE (what this content should be about):\n${ctx.intakeText || "(none provided)"}`);
   if (ctx.brand?.sample_copy) parts.push(`SAMPLE COPY (anchor on this voice):\n${ctx.brand.sample_copy}`);
 
   // Hand each agent the upstream outputs it depends on.

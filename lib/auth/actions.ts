@@ -10,6 +10,9 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 40);
 }
 
+const UNAVAILABLE_MESSAGE =
+  "Can't reach the database right now. If your Supabase project is paused, restore it in the Supabase dashboard and try again.";
+
 // Sign in with email/password. Redirects on success.
 export async function signInAction(_prev: unknown, formData: FormData): Promise<ActionResult> {
   const parsed = loginSchema.safeParse({
@@ -20,7 +23,11 @@ export async function signInAction(_prev: unknown, formData: FormData): Promise<
 
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error) return { error: "Incorrect email or password." };
+  if (error) {
+    // status 0 = network failure (e.g. Supabase project paused), not bad credentials.
+    if (!error.status || error.status >= 500) return { error: UNAVAILABLE_MESSAGE };
+    return { error: "Incorrect email or password." };
+  }
   redirect("/dashboard");
 }
 

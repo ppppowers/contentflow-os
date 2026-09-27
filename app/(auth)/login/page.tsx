@@ -1,24 +1,10 @@
-"use client";
+import { LoginForm } from "@/components/auth/LoginForm";
 
-import Link from "next/link";
-import { useFormState } from "react-dom";
-import { signInAction } from "@/lib/auth/actions";
-import { SubmitButton, Field } from "@/components/auth/SubmitButton";
+const NOTICES: Record<string, string> = {
+  unavailable:
+    "Can't reach the database right now. If your Supabase project is paused, restore it in the Supabase dashboard, then reload.",
+};
 
-export default function LoginPage() {
-  const [state, formAction] = useFormState(signInAction, undefined);
-  return (
-    <form action={formAction} className="space-y-4">
-      <Field label="Email" name="email" type="email" autoComplete="email" />
-      <Field label="Password" name="password" type="password" autoComplete="current-password" />
-      {state && "error" in state && (
-        <p className="text-sm text-red-600">{state.error}</p>
-      )}
-      <SubmitButton>Sign in</SubmitButton>
-      <div className="flex justify-between text-xs text-neutral-500">
-        <Link href="/reset-password" className="hover:underline">Forgot password?</Link>
-        <Link href="/signup" className="hover:underline">Create agency</Link>
-      </div>
-    </form>
-  );
+export default function LoginPage({ searchParams }: { searchParams: { error?: string } }) {
+  return <LoginForm notice={searchParams.error ? NOTICES[searchParams.error] : undefined} />;
 }

@@ -43,7 +43,10 @@ export default async function ContentPage({ searchParams }: { searchParams: { ar
         <CardContent className="p-0">
           {projects.length === 0 ? (
             <p className="px-5 py-8 text-sm text-neutral-400">
-              No content projects yet. Create one from a reviewed intake submission.
+              No content yet.{" "}
+              <Link href="/create" className="font-medium text-neutral-900 underline">
+                Create your first piece →
+              </Link>
             </p>
           ) : (
             <ul className="divide-y divide-neutral-100">

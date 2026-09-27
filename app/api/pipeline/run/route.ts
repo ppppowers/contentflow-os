@@ -15,7 +15,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { projectId?: string; upTo?: AgentName };
+  const body = (await req.json().catch(() => ({}))) as {
+    projectId?: string;
+    upTo?: AgentName;
+    maxSteps?: number;
+  };
   if (!body.projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
   // RLS-scoped existence check (also enforces tenant).
@@ -30,7 +34,11 @@ export async function POST(req: Request) {
   const result = await runPipeline(
     body.projectId,
     { agencyId: ctx.agencyId, userId: ctx.userId },
-    { upTo: body.upTo },
+    {
+      upTo: body.upTo,
+      maxSteps:
+        typeof body.maxSteps === "number" && body.maxSteps >= 1 ? Math.floor(body.maxSteps) : undefined,
+    },
   );
   return NextResponse.json(result);
 }

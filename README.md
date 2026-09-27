@@ -18,11 +18,11 @@ Next.js 14 (App Router) · TypeScript · Tailwind · Supabase (Postgres + Auth +
 cp .env.local.example .env.local      # fill in keys (see below)
 npm install
 supabase start                         # local Postgres + Auth + Storage
-supabase db reset                      # runs migrations 0001–0012 + seed
+supabase db reset                      # runs all migrations + seed
 npm run dev                            # http://localhost:3000
 npm test                               # authenticity scorer unit tests
 ```
-Open `/signup` → create an agency (you become owner) → add a client + brand profile → submit intake → "Create content project" → "Run pipeline" (needs `ANTHROPIC_API_KEY`).
+Open `/signup` → create an agency (you become owner) → **+ Create content** → pick or add a client, describe the week, tick "Create images" → the pipeline runs with live progress and the finished posts appear with Copy buttons and images (needs `ANTHROPIC_API_KEY`; images need `OPENAI_API_KEY`). The monthly intake flow still works for agencies that prefer it.
 
 ## Environment variables
 | Var | Where | Notes |
@@ -31,6 +31,8 @@ Open `/signup` → create an agency (you become owner) → add a client + brand 
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | Anon key (RLS enforces access) |
 | `SUPABASE_SERVICE_ROLE_KEY` | **server** | Bypasses RLS — onboarding + ownership-gated client decisions only |
 | `ANTHROPIC_API_KEY` | **server** | Claude API (the 9 agents) |
+| `OPENAI_API_KEY` | **server** | OpenAI image generation (optional — images are disabled without it) |
+| `OPENAI_IMAGE_MODEL` | **server** | Optional image model override (default `gpt-image-2`) |
 | `NEXT_PUBLIC_SITE_URL` | public | e.g. `https://app.example.com` |
 
 Never prefix server secrets with `NEXT_PUBLIC_`.

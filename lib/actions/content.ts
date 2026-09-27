@@ -103,3 +103,20 @@ export async function unarchiveProject(projectId: string): Promise<void> {
   revalidatePath("/content");
   revalidatePath(`/content/${projectId}`);
 }
+
+// Remove one generated image (row + stored file).
+export async function deleteImage(projectId: string, imageId: string): Promise<void> {
+  const ctx = await getSessionContext();
+  if (!ctx || !isStaff(ctx.role)) return;
+  const supabase = supabaseServer();
+  const { data } = await supabase
+    .from("content_images")
+    .select("storage_path")
+    .eq("id", imageId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (!data) return;
+  await supabase.storage.from("content-images").remove([data.storage_path as string]);
+  await supabase.from("content_images").delete().eq("id", imageId);
+  revalidatePath(`/content/${projectId}`);
+}

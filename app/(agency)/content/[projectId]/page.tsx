@@ -21,8 +21,10 @@ import { promoteProject } from "@/lib/actions/agency-brain";
 import { SEQUENCE } from "@/lib/agents/registry";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
-import { RunControls } from "@/components/content/RunControls";
-import { PieceEditor } from "@/components/content/PieceEditor";
+import { ProjectRunner } from "@/components/content/ProjectRunner";
+import { PieceCard } from "@/components/content/PieceCard";
+import { listProjectImages } from "@/lib/data/images";
+import { IMAGE_CHANNELS } from "@/lib/images/service";
 import { RegenerateButton } from "@/components/content/RegenerateButton";
 
 const RUN_TONE: Record<string, BadgeTone> = {
@@ -32,17 +34,31 @@ const RUN_TONE: Record<string, BadgeTone> = {
   queued: "neutral",
 };
 
-export default async function ProjectPage({ params }: { params: { projectId: string } }) {
+// Display order for finished pieces: the things people post most, first.
+const CHANNEL_ORDER = ["linkedin", "instagram", "facebook", "newsletter", "blog", "sms", "website_announcement"];
+
+export default async function ProjectPage({
+  params,
+  searchParams,
+}: {
+  params: { projectId: string };
+  searchParams: { run?: string };
+}) {
   await requireStaff();
   const bundle = await getProjectBundle(params.projectId);
   if (!bundle) notFound();
   const { project, runs, latest, pieces, authenticity } = bundle;
-  const [approvals, revisions, similar, qaRun] = await Promise.all([
+  const [approvals, revisions, similar, qaRun, images] = await Promise.all([
     getApprovals(project.id),
     getRevisions(project.id),
     checkProjectSimilarity(project.id),
     getLatestQARun(project.id),
+    listProjectImages(project.id),
   ]);
+  const finished = SEQUENCE.every((a) => a in latest);
+  const orderedPieces = pieces
+    .filter((p) => p.body?.trim())
+    .sort((a, b) => CHANNEL_ORDER.indexOf(a.channel) - CHANNEL_ORDER.indexOf(b.channel));
   const scorecard = await getLatestScorecard(project.id);
 
   // Latest run status per agent for the timeline.
@@ -103,10 +119,43 @@ export default async function ProjectPage({ params }: { params: { projectId: str
         </div>
       )}
 
-      <Card>
-        <CardHeader><CardTitle>Run pipeline</CardTitle></CardHeader>
-        <CardContent><RunControls projectId={project.id} /></CardContent>
-      </Card>
+      {project.brief && (
+        <p className="rounded-lg bg-neutral-50 p-3 text-sm text-neutral-600">
+          <span className="font-medium text-neutral-800">Brief: </span>
+          {project.brief}
+        </p>
+      )}
+
+      <ProjectRunner
+        projectId={project.id}
+        steps={SEQUENCE}
+        doneSteps={SEQUENCE.filter((a) => a in latest)}
+        autoStart={searchParams.run === "1"}
+        wantsImages={project.options?.images === true}
+        hasImages={images.length > 0}
+        finished={finished}
+      />
+
+      {/* Finished content — the point of the page */}
+      {orderedPieces.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-neutral-700">Your content</h3>
+          {orderedPieces.map((p) => (
+            <PieceCard
+              key={p.id}
+              projectId={project.id}
+              piece={{
+                id: p.id,
+                channel: p.channel,
+                body: p.body,
+                metadata: (p.metadata as Record<string, unknown>) ?? {},
+              }}
+              images={images.filter((i) => i.channel === p.channel)}
+              canHaveImages={p.channel in IMAGE_CHANNELS}
+            />
+          ))}
+        </section>
+      )}
 
       {/* Review & approval */}
       <Card>
@@ -176,6 +225,12 @@ export default async function ProjectPage({ params }: { params: { projectId: str
         </CardContent>
       </Card>
 
+      {/* Everything below is for power users: pipeline internals, QA, scores. */}
+      <details className="rounded-xl border border-neutral-200 bg-white">
+        <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-neutral-600">
+          Advanced — pipeline steps, quality checks, costs
+        </summary>
+        <div className="space-y-6 p-5 pt-2">
       {/* Agent timeline */}
       <Card>
         <CardHeader><CardTitle>Agent pipeline</CardTitle></CardHeader>
@@ -318,27 +373,6 @@ export default async function ProjectPage({ params }: { params: { projectId: str
         </Card>
       )}
 
-      {/* Content pieces — editable */}
-      {pieces.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Deliverables (editable)</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            {pieces.map((p) => (
-              <PieceEditor
-                key={p.id}
-                projectId={project.id}
-                piece={{
-                  id: p.id,
-                  channel: p.channel,
-                  body: p.body,
-                  metadata: (p.metadata as Record<string, unknown>) ?? {},
-                }}
-              />
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
       {/* Raw agent outputs (audit) */}
       <Card>
         <CardHeader><CardTitle>Latest agent outputs</CardTitle></CardHeader>
@@ -357,6 +391,8 @@ export default async function ProjectPage({ params }: { params: { projectId: str
           )}
         </CardContent>
       </Card>
+        </div>
+      </details>
     </div>
   );
 }
