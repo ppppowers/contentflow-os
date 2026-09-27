@@ -53,11 +53,16 @@ export function ProjectRunner({
       body: JSON.stringify({ projectId }),
     });
     const data = await res.json().catch(() => ({}));
+    setPhase("done");
     if (!res.ok) {
-      setPhase("done");
       setMsg(`Writing is done, but images failed: ${data.error || (data.errors ?? []).join("; ") || res.statusText}`);
+    } else if (data.promptsOnly === "no_key") {
+      setMsg("Image prompts are ready. Copy one from each post into ChatGPT to make the image (or add an OpenAI key to generate them here).");
+    } else if (data.promptsOnly === "no_credits") {
+      setMsg("Your OpenAI account is out of credits, so we wrote image prompts instead. Copy them from each post into ChatGPT.");
+    } else if (data.promptsOnly === "failed") {
+      setMsg(`OpenAI couldn't make the images (${(data.errors ?? []).join("; ") || "unknown error"}), so we wrote image prompts instead. Copy them from each post into ChatGPT.`);
     } else {
-      setPhase("done");
       setMsg(data.errors?.length ? `Some images failed: ${data.errors.join("; ")}` : null);
     }
     router.refresh();

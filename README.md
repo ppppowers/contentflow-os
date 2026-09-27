@@ -31,7 +31,7 @@ Open `/signup` → create an agency (you become owner) → **+ Create content** 
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | Anon key (RLS enforces access) |
 | `SUPABASE_SERVICE_ROLE_KEY` | **server** | Bypasses RLS — onboarding + ownership-gated client decisions only |
 | `ANTHROPIC_API_KEY` | **server** | Claude API (the 9 agents) |
-| `OPENAI_API_KEY` | **server** | OpenAI image generation (optional — images are disabled without it) |
+| `OPENAI_API_KEY` | **server** | OpenAI image generation (optional — without it, or without credits, each post gets a copy-ready ChatGPT image prompt instead) |
 | `OPENAI_IMAGE_MODEL` | **server** | Optional image model override (default `gpt-image-2`) |
 | `NEXT_PUBLIC_SITE_URL` | public | e.g. `https://app.example.com` |
 

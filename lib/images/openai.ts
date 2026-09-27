@@ -1,7 +1,22 @@
 // Server-only OpenAI image generation. NEVER import from client components.
 // Model is configurable so a newer OpenAI image model can be swapped in via env.
 
-export type ImageSize = "1024x1024" | "1536x1024" | "1024x1536";
+import type { ImageSize } from "./channels";
+
+export type { ImageSize };
+
+// Carries OpenAI's error code so callers can tell "out of credits" from other failures.
+export class OpenAIImageError extends Error {
+  constructor(message: string, readonly status: number, readonly code: string | null) {
+    super(message);
+  }
+  get isBilling(): boolean {
+    return (
+      ["insufficient_quota", "billing_hard_limit_reached", "billing_not_active"].includes(this.code ?? "") ||
+      /billing|quota|credit/i.test(this.message)
+    );
+  }
+}
 
 export type GeneratedImage = { png: Buffer; model: string; size: ImageSize };
 
@@ -23,10 +38,14 @@ export async function generateImage(prompt: string, size: ImageSize): Promise<Ge
   });
 
   const json = (await res.json().catch(() => null)) as
-    | { data?: { b64_json?: string }[]; error?: { message?: string } }
+    | { data?: { b64_json?: string }[]; error?: { message?: string; code?: string | null } }
     | null;
   if (!res.ok) {
-    throw new Error(`OpenAI image error (${res.status}): ${json?.error?.message ?? res.statusText}`);
+    throw new OpenAIImageError(
+      `OpenAI image error (${res.status}): ${json?.error?.message ?? res.statusText}`,
+      res.status,
+      json?.error?.code ?? null,
+    );
   }
   const b64 = json?.data?.[0]?.b64_json;
   if (!b64) throw new Error("OpenAI returned no image.");
