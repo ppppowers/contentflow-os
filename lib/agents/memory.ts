@@ -46,6 +46,12 @@ export async function assembleContext(
     .select("client_id, submission_id")
     .eq("id", projectId)
     .single();
+  // Separate query: tolerates databases where migration 0031 (brief) isn't applied yet.
+  const { data: briefRow } = await supabase
+    .from("content_projects")
+    .select("brief")
+    .eq("id", projectId)
+    .maybeSingle();
 
   const clientId = project?.client_id;
   const submissionId = project?.submission_id;
@@ -67,9 +73,11 @@ export async function assembleContext(
       : Promise.resolve({ data: [] }),
   ]);
 
-  const intakeText = ((itemsRes.data as { type: string; title: string | null; body: string | null }[]) ?? [])
-    .map((it) => `[${it.type}] ${it.title ? it.title + " — " : ""}${it.body ?? ""}`)
-    .join("\n");
+  const itemLines = ((itemsRes.data as { type: string; title: string | null; body: string | null }[]) ?? [])
+    .map((it) => `[${it.type}] ${it.title ? it.title + " — " : ""}${it.body ?? ""}`);
+  // A brief typed on the Create page leads; monthly intake items (if any) follow.
+  const brief = (briefRow?.brief as string | null | undefined)?.trim();
+  const intakeText = [brief ? `[brief] ${brief}` : null, ...itemLines].filter(Boolean).join("\n");
 
   // Business Brain — permanent client knowledge, consulted before generation.
   // Client memory — topics already covered for this client (excluding this project).

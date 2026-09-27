@@ -4,7 +4,7 @@ import { updateSession } from "@/lib/supabase/middleware";
 const PUBLIC_PATHS = ["/login", "/signup", "/reset-password", "/auth"];
 
 export async function middleware(request: NextRequest) {
-  const { response, user } = await updateSession(request);
+  const { response, user, authUnavailable } = await updateSession(request);
   const { pathname } = request.nextUrl;
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
@@ -16,6 +16,7 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
+    if (authUnavailable) url.searchParams.set("error", "unavailable");
     return NextResponse.redirect(url);
   }
 

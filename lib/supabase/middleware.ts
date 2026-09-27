@@ -30,9 +30,17 @@ export async function updateSession(request: NextRequest) {
   );
 
   // IMPORTANT: getUser() validates the JWT with the auth server (do not trust getSession alone).
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Bounded: when Supabase is unreachable (e.g. a paused project) auth-js retries a
+  // token refresh for ~30s, which exceeds Vercel's middleware limit and leaves a
+  // white screen. Give up after AUTH_TIMEOUT_MS and treat the request as signed out.
+  const result = await Promise.race([
+    supabase.auth.getUser().then(({ data }) => ({ user: data.user, timedOut: false })),
+    new Promise<{ user: null; timedOut: true }>((resolve) =>
+      setTimeout(() => resolve({ user: null, timedOut: true }), AUTH_TIMEOUT_MS),
+    ),
+  ]);
 
-  return { response, user };
+  return { response, user: result.user, authUnavailable: result.timedOut };
 }
+
+const AUTH_TIMEOUT_MS = 5000;

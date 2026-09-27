@@ -21,11 +21,16 @@ export async function listProjects(archived = false) {
 export async function getProjectBundle(projectId: string) {
   const supabase = createClient();
 
-  const { data: project } = await supabase
+  const base = "id, title, status, current_agent, authenticity_score, period, clients(name)";
+  let { data: project, error } = await supabase
     .from("content_projects")
-    .select("id, title, status, current_agent, authenticity_score, period, clients(name)")
+    .select(`${base}, brief, options`)
     .eq("id", projectId)
     .maybeSingle();
+  // Before migration 0031 is applied the brief/options columns don't exist yet.
+  if (error?.code === "42703") {
+    ({ data: project } = await supabase.from("content_projects").select(base).eq("id", projectId).maybeSingle());
+  }
   if (!project) return null;
 
   const [runs, outputs, pieces, authenticity] = await Promise.all([
@@ -64,6 +69,8 @@ export async function getProjectBundle(projectId: string) {
       status: string;
       current_agent: string | null;
       authenticity_score: number | null;
+      brief: string | null;
+      options: { images?: boolean } | null;
       clients: { name: string } | null;
     },
     runs: (runs.data as never[]) ?? [],

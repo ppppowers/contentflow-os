@@ -12,28 +12,53 @@ export default async function AgencyLayout({ children }: { children: React.React
   const brandName = branding?.brand_name?.trim() || "ContentFlow OS";
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-56 shrink-0 border-r border-neutral-200 bg-neutral-50 p-4">
-        <div className="mb-6">
-          <p className="text-sm font-semibold">{brandName}</p>
-          <p className="text-xs text-neutral-500 capitalize">{ctx.role}</p>
+    <div className="flex min-h-screen flex-col md:flex-row">
+      <aside className="shrink-0 border-b border-neutral-200 bg-neutral-50 p-4 md:w-56 md:border-b-0 md:border-r">
+        <div className="mb-4 flex items-center justify-between md:block">
+          <div>
+            <p className="text-sm font-semibold">{brandName}</p>
+            <p className="text-xs capitalize text-neutral-500">{ctx.role}</p>
+          </div>
         </div>
-        <nav className="space-y-1 text-sm">
-          <NavLink href="/dashboard">Dashboard</NavLink>
-          <NavLink href="/clients">Clients</NavLink>
-          <NavLink href="/collect">Collect</NavLink>
+        <Link
+          href="/create"
+          className="mb-4 block rounded-lg bg-neutral-900 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-neutral-800"
+        >
+          + Create content
+        </Link>
+        <nav className="flex flex-wrap gap-1 text-sm md:block md:space-y-1">
+          <NavLink href="/dashboard">Home</NavLink>
           <NavLink href="/content">Content</NavLink>
-          <NavLink href="/agency-brain">Agency Brain</NavLink>
-          <NavLink href="/playbooks">Playbooks</NavLink>
-          {admin && <NavLink href="/revenue">Revenue</NavLink>}
-          {admin && <NavLink href="/integrations">Integrations</NavLink>}
-          {admin && <NavLink href="/settings">Settings</NavLink>}
+          <NavLink href="/clients">Clients</NavLink>
+          <NavGroup label="Tools">
+            <NavLink href="/collect">Collect</NavLink>
+            <NavLink href="/agency-brain">Agency Brain</NavLink>
+            <NavLink href="/playbooks">Playbooks</NavLink>
+          </NavGroup>
+          {admin && (
+            <NavGroup label="Admin">
+              <NavLink href="/revenue">Revenue</NavLink>
+              <NavLink href="/integrations">Integrations</NavLink>
+              <NavLink href="/settings">Settings</NavLink>
+            </NavGroup>
+          )}
         </nav>
-        <form action={signOutAction} className="mt-8">
+        <form action={signOutAction} className="mt-4 md:mt-8">
           <button className="text-xs text-neutral-500 hover:text-neutral-900">Sign out</button>
         </form>
       </aside>
-      <main className="flex-1 p-8">{children}</main>
+      <main className="min-w-0 flex-1 p-4 md:p-8">{children}</main>
+    </div>
+  );
+}
+
+function NavGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="contents md:block md:pt-3">
+      <p className="hidden px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400 md:block">
+        {label}
+      </p>
+      {children}
     </div>
   );
 }

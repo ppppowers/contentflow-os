@@ -12,6 +12,8 @@ export type PipelineResult = {
   stoppedAt?: AgentName;
   reason?: string;
   status: string;
+  // Set when `maxSteps` paused the run early: the agent that runs next.
+  next?: AgentName;
 };
 
 async function latestOutput(projectId: string, agent: AgentName): Promise<Record<string, unknown> | null> {
@@ -92,7 +94,7 @@ async function materializePieces(projectId: string, agencyId: string) {
 export async function runPipeline(
   projectId: string,
   ctx: RunContext,
-  opts: { upTo?: AgentName; steps?: AgentName[] } = {},
+  opts: { upTo?: AgentName; steps?: AgentName[]; maxSteps?: number } = {},
 ): Promise<PipelineResult> {
   const supabase = createClient();
   const ran: AgentName[] = [];
@@ -109,6 +111,11 @@ export async function runPipeline(
   for (let i = 0; i <= stopIndex; i++) {
     const agent = steps[i];
     if (done.has(agent)) continue;
+    // Step mode: callers (the Create page) run one agent per request so each
+    // request stays well inside the function time limit and progress is visible.
+    if (opts.maxSteps !== undefined && ran.length >= opts.maxSteps) {
+      return { ran, status: await currentStatus(projectId), next: agent };
+    }
 
     await setStatus(projectId, await currentStatus(projectId), agent);
 
