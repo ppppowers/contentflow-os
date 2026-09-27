@@ -107,6 +107,8 @@ function ImageStrip({
   const [busy, setBusy] = useState<"image" | "prompt" | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // Prompt from the latest response, shown immediately (before/without a DB round trip).
+  const [freshPrompt, setFreshPrompt] = useState<string | null>(null);
   const [custom, setCustom] = useState(false);
   const [prompt, setPrompt] = useState(imagePrompt ?? images[0]?.prompt ?? "");
 
@@ -120,16 +122,20 @@ function ImageStrip({
       body: JSON.stringify({ projectId, channel, prompt: withPrompt, promptsOnly: kind === "prompt" }),
     });
     const data = await res.json().catch(() => ({}));
+    const returned = (data.prompts as { prompt: string }[] | undefined)?.[0]?.prompt;
+    if (returned) setFreshPrompt(returned);
     if (!res.ok) setErr(data.error || (data.errors ?? []).join("; ") || "Image failed");
     else if (data.promptsOnly === "no_credits") {
       setNote("Your OpenAI account is out of credits — copy the prompt below into ChatGPT instead.");
+    } else if (data.promptsOnly === "failed") {
+      setNote(`OpenAI couldn't make this image (${(data.errors ?? []).join("; ") || "unknown error"}). Copy the prompt below into ChatGPT instead.`);
     }
     setBusy(null);
     setCustom(false);
     router.refresh();
   }
 
-  const shownPrompt = imagePrompt ?? images[0]?.prompt ?? null;
+  const shownPrompt = freshPrompt ?? imagePrompt ?? images[0]?.prompt ?? null;
 
   return (
     <div className="space-y-3 border-t border-neutral-100 pt-3">
@@ -173,15 +179,13 @@ function ImageStrip({
           <p className="text-xs leading-relaxed text-neutral-600">{shownPrompt}</p>
         </div>
       ) : (
-        !canGenerate && (
-          <button
-            disabled={busy !== null}
-            onClick={() => call("prompt")}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50 disabled:opacity-50"
-          >
-            {busy === "prompt" ? "Writing prompt…" : "Write an image prompt for ChatGPT"}
-          </button>
-        )
+        <button
+          disabled={busy !== null}
+          onClick={() => call("prompt")}
+          className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50 disabled:opacity-50"
+        >
+          {busy === "prompt" ? "Writing prompt…" : "Write an image prompt for ChatGPT"}
+        </button>
       )}
 
       {canGenerate &&

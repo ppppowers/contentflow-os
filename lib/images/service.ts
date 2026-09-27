@@ -70,12 +70,12 @@ async function writePrompts(projectId: string, pieces: Piece[]): Promise<Map<str
   return out;
 }
 
-// promptsOnly: no image was attempted (no key) or OpenAI refused for billing —
-// the prompts were still written and saved so they can be pasted into ChatGPT.
+// promptsOnly: no image was made (no key, out of credits, or OpenAI refused for
+// another reason) — the prompts were still written and saved for ChatGPT.
 export type ImageJobResult = {
   created: number;
   errors: string[];
-  promptsOnly?: "no_key" | "no_credits";
+  promptsOnly?: "no_key" | "no_credits" | "failed";
   prompts: { channel: string; prompt: string }[];
 };
 
@@ -155,7 +155,9 @@ export async function generateProjectImages(
       }
     }),
   );
-  if (billing && created === 0) return { created, errors, promptsOnly: "no_credits", prompts: promptList };
+  if (created === 0) {
+    return { created, errors, promptsOnly: billing ? "no_credits" : "failed", prompts: promptList };
+  }
   if (billing) errors.push("Some images were skipped: the OpenAI account is out of credits.");
   return { created, errors, prompts: promptList };
 }

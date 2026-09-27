@@ -60,6 +60,8 @@ export function ProjectRunner({
       setMsg("Image prompts are ready. Copy one from each post into ChatGPT to make the image (or add an OpenAI key to generate them here).");
     } else if (data.promptsOnly === "no_credits") {
       setMsg("Your OpenAI account is out of credits, so we wrote image prompts instead. Copy them from each post into ChatGPT.");
+    } else if (data.promptsOnly === "failed") {
+      setMsg(`OpenAI couldn't make the images (${(data.errors ?? []).join("; ") || "unknown error"}), so we wrote image prompts instead. Copy them from each post into ChatGPT.`);
     } else {
       setMsg(data.errors?.length ? `Some images failed: ${data.errors.join("; ")}` : null);
     }
