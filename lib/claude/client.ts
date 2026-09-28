@@ -151,3 +151,67 @@ export async function callStructured<T = unknown>(args: {
     usage: { model, inputTokens, outputTokens, costUsd: costOf(model, inputTokens, outputTokens) },
   };
 }
+
+export type WebSource = { url: string; title: string };
+export type WebSearchResult = { text: string; sources: WebSource[]; usage: ClaudeUsage };
+
+// Calls Claude with the server-side web search tool and returns its final prose
+// answer plus the pages it looked at. Server tools can pause a long turn
+// (stop_reason "pause_turn"); we resume by re-sending the assistant turn.
+// Requires web search to be enabled for the org in the Anthropic Console.
+export async function callWithWebSearch(args: {
+  tier: ModelTier;
+  system: string;
+  user: string;
+  maxUses?: number;
+  maxTokens?: number;
+}): Promise<WebSearchResult> {
+  const model = MODELS[args.tier];
+  const tools = [{ type: "web_search_20260209", name: "web_search", max_uses: args.maxUses ?? 6 }];
+  const messages: { role: "user" | "assistant"; content: unknown }[] = [{ role: "user", content: args.user }];
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  const sources = new Map<string, string>();
+  let text = "";
+
+  for (let turn = 0; turn < 5; turn++) {
+    const res = (await client().messages.create({
+      model,
+      max_tokens: args.maxTokens ?? 16000,
+      system: args.system,
+      messages,
+      tools,
+    } as never)) as unknown as {
+      stop_reason: string;
+      content: { type: string; text?: string; content?: unknown }[];
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+    inputTokens += res.usage?.input_tokens ?? 0;
+    outputTokens += res.usage?.output_tokens ?? 0;
+
+    for (const block of res.content) {
+      if (block.type === "text" && block.text) text += block.text;
+      // Successful searches return a list of results; errors return an object.
+      if (block.type === "web_search_tool_result" && Array.isArray(block.content)) {
+        for (const r of block.content as { type?: string; url?: string; title?: string }[]) {
+          if (r.url) sources.set(r.url, r.title ?? r.url);
+        }
+      }
+    }
+
+    if (res.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: res.content });
+      text = "";
+      continue;
+    }
+    if (res.stop_reason === "refusal") throw new Error("Claude declined this search request.");
+    break;
+  }
+
+  return {
+    text: text.trim(),
+    sources: [...sources].map(([url, title]) => ({ url, title })),
+    usage: { model, inputTokens, outputTokens, costUsd: costOf(model, inputTokens, outputTokens) },
+  };
+}
