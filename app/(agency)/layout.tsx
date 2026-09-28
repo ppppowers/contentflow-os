@@ -30,6 +30,7 @@ export default async function AgencyLayout({ children }: { children: React.React
           <NavLink href="/dashboard">Home</NavLink>
           <NavLink href="/content">Content</NavLink>
           <NavLink href="/clients">Clients</NavLink>
+          <NavLink href="/seo">SEO Studio</NavLink>
           <NavGroup label="Tools">
             <NavLink href="/collect">Collect</NavLink>
             <NavLink href="/agency-brain">Agency Brain</NavLink>

@@ -33,6 +33,8 @@ Open `/signup` → create an agency (you become owner) → **+ Create content** 
 | `ANTHROPIC_API_KEY` | **server** | Claude API (the 9 agents) |
 | `OPENAI_API_KEY` | **server** | OpenAI image generation (optional — without it, or without credits, each post gets a copy-ready ChatGPT image prompt instead) |
 | `OPENAI_IMAGE_MODEL` | **server** | Optional image model override (default `gpt-image-2`) |
+| `GITHUB_TOKEN` | **server** | SEO Studio publishing: fine-grained token with Contents + Pull requests (read & write) on client site repos |
+| `CRON_SECRET` | **server** | Protects the weekly SEO monitor (`/api/cron/seo`, scheduled in `vercel.json`) |
 | `NEXT_PUBLIC_SITE_URL` | public | e.g. `https://app.example.com` |
 
 Never prefix server secrets with `NEXT_PUBLIC_`.
